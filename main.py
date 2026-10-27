@@ -4,6 +4,8 @@
 #10/27 discovered jamie used ai. oof :C
 #de-ai-ified some stuff and made some variables sexier
 
+#ok then
+
 debug = True
 
 
@@ -66,9 +68,9 @@ class Player(pygame.sprite.Sprite):
 		self.frictionCrouch = 1.2
 		self.speed = 1
 		self.speedAir = 0.4
-		self.jumpForce = 13
+		self.jumpForce = 10
 		self.gravity = 0.8
-		self.jumpGravity = 0.5
+		self.jumpGravity = 0.3
 		self.maxFallVelocity = 12
 
 		#visual
@@ -204,7 +206,91 @@ class Player(pygame.sprite.Sprite):
 		self.image = pygame.transform.flip(self.frames[int(self.current_frame)], self.isFacingLeft, False)
 
 	def draw(self, surface, offsetX, offsetY):
-		draw_pos = (self.rect.x + self.imgOffX - offsetX, self.rect.y + self.imgOffY - offsetY)
+		draw_pos = (round(self.rect.x + self.imgOffX - offsetX), round(self.rect.y + self.imgOffY - offsetY))
+		surface.blit(self.image, draw_pos)
+
+class Entity(pygame.sprite.Sprite):
+	def __init__(self, EntityName = "test", State = "base", spriteWidth = 32, spriteHeight = 24, scale = 2, animframes = 5):
+		super().__init__()
+		self.spritesheet = SpriteSheet(f"Assets/Images/Sprites/Entities/{EntityName}/{State}.png", scale) 
+		#something goes here
+	  
+		#entity stats
+		self.posX = 80
+		self.posY = 80
+		self.velX = 0
+		self.velY = -1
+		self.health = 1
+		self.hitCooldown = 0
+		self.onGround = False
+
+		#entity movement
+		self.movedirection = -1
+	
+		#player physics
+		self.frictionGround = 1.4
+		self.frictionAir = 1.03
+		self.frictionCrouch = 1.2
+		self.speed = 1
+		self.speedAir = 0.4
+		self.jumpForce = 10
+		self.gravity = 0.8
+		self.jumpGravity = 0.3
+		self.maxFallVelocity = 12
+	
+		#visual
+		self.debugBoxColor = (255,0,0)
+		self.animationState = "idle"
+		self.imgOffX = -10.8 * scale
+		self.imgOffY = -9.6 * scale
+		self.isFacingLeft = True
+	
+	
+		self.frames = []
+		self.spriteWidth = spriteWidth * scale
+		self.spriteHeight = spriteHeight * scale
+			
+		for i in range(5): #frame count i'll make this editable later idk what i want to do with it tho
+			frame = self.spritesheet.get_image(i * self.spriteWidth, 0, self.spriteWidth, self.spriteHeight, False)
+			self.frames.append(frame)
+
+		self.current_frame = 0
+		self.animationSpeed = 0.15 
+			
+		self.image = self.frames[int(self.current_frame)]
+		self.rect = self.image.get_rect().scale_by((0.3, 0.6))
+		self.rect.topleft = (self.posX, self.posY)
+
+	def update(self, collision_tiles, danger_tiles):
+		"""it's moving"""
+		print(self.isFacingLeft)
+
+		if self.hitCooldown > 0:
+			self.hitCooldown -= 0.1
+
+		if self.health <= 0:
+			print("oof")
+		else:
+			self.move(collision_tiles, danger_tiles)
+
+		match self.animationState:
+			case "idle":
+				self.current_frame = 0
+			case "walk":
+				self.current_frame += self.animationSpeed
+				if self.current_frame >= 3:
+					self.current_frame = 1
+			case "air":
+				self.current_frame = 2
+			case "crouch":
+				self.current_frame = 3
+			case "hurt":
+				self.current_frame = 4
+			
+		self.image = pygame.transform.flip(self.frames[int(self.current_frame)], self.isFacingLeft, False)
+
+	def draw(self, surface, offsetX, offsetY):
+		draw_pos = (round(self.rect.x + self.imgOffX - offsetX), round(self.rect.y + self.imgOffY - offsetY))
 		surface.blit(self.image, draw_pos)
 
 #tiles and shit
@@ -256,7 +342,7 @@ def BuildMap(map_data, cameraX, cameraY):
 			y = row_idx * TileScale
 
 			if tile_type in TileTextures:
-				screen.blit(TileTextures[tile_type], (x - cameraX, y - cameraY))
+				screen.blit(TileTextures[tile_type], (round(x - cameraX), round(y - cameraY)))
 
 				if TileProperties[tile_type] == "solid":
 					tile_rect = pygame.Rect(x, y, TileScale, TileScale)
@@ -275,7 +361,7 @@ PlayerGroup.add(player)
 camX = 0
 camY = 0
 camSmoothX = 4
-camSmoothY = 70
+camSmoothY = 25
 
 clock = pygame.time.Clock()
 
@@ -301,10 +387,10 @@ while running:
 		[],
 		[],
 		[],
-		[0, "SpikeUC", 0],
-		["GrassUL","GrassUC","GrassUR"],
-		["GrassCL","Dirt","GrassCR"],
-		["GrassLL","GrassLC","GrassLR"]
+		["SpikeUC", "SpikeUC", 0],
+		["GrassUL","GrassUC","GrassUC","GrassUC","GrassUC","GrassUC","GrassUR"],
+		["GrassCL","Dirt","Dirt","Dirt","Dirt","Dirt","GrassCR"],
+		["GrassLL","GrassLC","GrassLC","GrassLC","GrassLC","GrassLC","GrassLR"]
 		], camX, camY) #this is gonna be annoying isn't it
 			
 	PlayerGroup.update(blocks, danger)
