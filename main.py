@@ -16,6 +16,8 @@ pygame.display.set_caption('Something Cool')
 #stuff
 import pygame
 
+TileGroup = pygame.sprite.Group()
+
 class SpriteSheet:
 	def __init__(self, filename, scale=1):
 		"""itn'nit?"""
@@ -47,9 +49,15 @@ class Player(pygame.sprite.Sprite):
   
 		#player stats
 		self.speed = 5
-		self.jump = 10
+		self.jump_speed = 10
+		self.gravity = 0.5
+		self.max_fall_speed = 12
+		self.velocity_y = 0
+		self.on_ground = False
 		
-
+		self.imgOffX = -10.8 * scale
+		self.imgOffY = -7.2 * scale
+  
 		self.frames = []
 		self.spriteWidth = spriteWidth * scale
 		self.spriteHeight = spriteHeight * scale
@@ -62,16 +70,18 @@ class Player(pygame.sprite.Sprite):
 		self.animation_speed = 0.15 
 		
 		self.image = self.frames[int(self.current_frame)]
-		self.rect = self.image.get_rect()
-		self.rect.center = (0, 0)
+		self.rect = self.image.get_rect().scale_by((0.3, 0.7))
+		self.rect.topleft = (8, 16)
 	
-	def handle_input(self):
-		"""guess"""
+	def jump(self):
+		if self.on_ground:
+			self.velocity_y = -self.jump_speed
+			self.on_ground = False
+
+	def handle_input(self, collision_tiles):
 		keys = pygame.key.get_pressed()
 
-		#velocity for later
 		dx = 0
-		dy = 0
 
 		if keys[pygame.K_a]:
 			dx = -self.speed
@@ -79,13 +89,30 @@ class Player(pygame.sprite.Sprite):
 			dx = self.speed
 
 		self.rect.x += dx
-		self.rect.y += dy
+		hits = [tile for tile in collision_tiles if self.rect.colliderect(tile)]
+		if hits:
+			if dx > 0:
+				self.rect.right = min(tile.left for tile in hits)
+			elif dx < 0:
+				self.rect.left = max(tile.right for tile in hits)
 
-	def update(self, action = "idle"):
+		self.velocity_y = min(self.velocity_y + self.gravity, self.max_fall_speed)
+		self.rect.y += round(self.velocity_y)
+		hits = [tile for tile in collision_tiles if self.rect.colliderect(tile)]
+		self.on_ground = False
+		if hits:
+			if self.velocity_y > 0:
+				self.rect.bottom = min(tile.top for tile in hits)
+				self.on_ground = True
+			elif self.velocity_y < 0:
+				self.rect.top = max(tile.bottom for tile in hits)
+			self.velocity_y = 0
+
+	def update(self, collision_tiles, action = "idle"):
 		"""Handles updating the animation frame."""
 		self.current_frame += self.animation_speed
 		
-		self.handle_input()
+		self.handle_input(collision_tiles)
 		match action:
 			case "idle":
 				self.current_frame = 0
@@ -100,12 +127,16 @@ class Player(pygame.sprite.Sprite):
 			
 		self.image = self.frames[int(self.current_frame)]
 
+	def draw(self, surface):
+		draw_pos = (self.rect.x + self.imgOffX, self.rect.y + self.imgOffY)
+		surface.blit(self.image, draw_pos)
+
 #tiles and shit
 TileScale = 32
 TileTextures = {
 	1: pygame.transform.scale(pygame.image.load('Assets/Images/Tiles/Tiles01.png').convert_alpha(), (TileScale, TileScale))
 }
-def draw_and_build_physics(map_data):
+def BuildMap(map_data):
     solid_blocks = []  # Clear/rebuild list every frame for collisions
 
     for row_idx, row in enumerate(map_data):
@@ -140,11 +171,28 @@ while running:
 	for event in pygame.event.get():
 		if event.type == pygame.QUIT:
 			running = False
+		elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+			player.jump()
+
+	tiles = BuildMap([
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+		 ]) #this is gonna be annoying isn't it
 			
-	PlayerGroup.update()
-	PlayerGroup.draw(screen)
- 
-	draw_and_build_physics([[1,1,1]]) #this is gonna be annoying isn't it
+	PlayerGroup.update(tiles)
+	for indvPlayer in PlayerGroup:
+		indvPlayer.draw(screen)
+	pygame.draw.rect(screen, (255,0,0), player.rect)
 	
 	pygame.display.flip()
 	clock.tick(60)
