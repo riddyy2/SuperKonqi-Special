@@ -2,6 +2,7 @@
 #so i'm probably doing something weird
 
 #10/27 discovered jamie used ai. oof :C
+#de-ai-ified some stuff and made some variables sexier
 
 debug = True
 
@@ -55,15 +56,19 @@ class Player(pygame.sprite.Sprite):
 		self.posY = 80
 		self.velX = 0
 		self.velY = -1
+		self.health = 3
+		self.hitCooldown = 0
 		self.onGround = False
 
 		#player physics
 		self.frictionGround = 1.4
-		self.frictionAir = 1.1
+		self.frictionAir = 1.03
 		self.frictionCrouch = 1.2
-		self.speed = 5
+		self.speed = 1
+		self.speedAir = 0.4
 		self.jumpForce = 13
-		self.gravity = 0.5
+		self.gravity = 0.8
+		self.jumpGravity = 0.5
 		self.maxFallVelocity = 12
 
 		#visual
@@ -78,7 +83,7 @@ class Player(pygame.sprite.Sprite):
 		self.spriteWidth = spriteWidth * scale
 		self.spriteHeight = spriteHeight * scale
 		
-		for i in range(4): #frame count i'll make this editable later idk what i want to do with it tho
+		for i in range(5): #frame count i'll make this editable later idk what i want to do with it tho
 			frame = self.spritesheet.get_image(i * self.spriteWidth, 0, self.spriteWidth, self.spriteHeight, False)
 			self.frames.append(frame)
 
@@ -94,7 +99,7 @@ class Player(pygame.sprite.Sprite):
 			self.velY = -self.jumpForce
 			self.onGround = False
 
-	def move(self, collision_tiles):
+	def move(self, collision_tiles, danger_tiles):
 		keys = pygame.key.get_pressed()
 		self.animationState = "idle"
 
@@ -102,7 +107,9 @@ class Player(pygame.sprite.Sprite):
 			self.jump()
 
 		frictionFinal = self.frictionGround
-		if keys[pygame.K_s]:
+		if self.hitCooldown > 1.4:
+			self.animationState = "hurt"
+		elif keys[pygame.K_s]:
 			self.animationState = "crouch"
 			frictionFinal = self.frictionCrouch
 		else:
@@ -110,12 +117,18 @@ class Player(pygame.sprite.Sprite):
 				self.isFacingLeft = True
 				self.debugBoxColor = (25,0,0)
 				self.animationState = "walk"
-				self.velX = -4
+				if self.onGround:
+					self.velX -= self.speed
+				else:
+					self.velX -= self.speedAir
 			if keys[pygame.K_d] and self.velX < 4:
 				self.isFacingLeft = False
 				self.debugBoxColor = (0,0,25)
 				self.animationState = "walk"
-				self.velX = 4
+				if self.onGround:
+					self.velX += self.speed
+				else:
+					self.velX += self.speedAir
 			if self.onGround:
 				self.debugBoxColor = (0,0,0)
 			else:
@@ -138,11 +151,14 @@ class Player(pygame.sprite.Sprite):
 			self.velX = 0
 			self.posX = self.rect.x
 
-		self.velY = min(self.velY + self.gravity, self.maxFallVelocity)+0.1
+		appliedGravity = self.gravity
+		if keys[pygame.K_SPACE]:
+			appliedGravity = self.jumpGravity
+		self.velY = min(self.velY + appliedGravity, self.maxFallVelocity)+0.1
 		self.posY += round(self.velY)
 		self.rect.y = round(self.posY) #round? idk
-		hits = [tile for tile in collision_tiles if self.rect.colliderect(tile)]
 		self.onGround = False
+		hits = [tile for tile in collision_tiles if self.rect.colliderect(tile)]
 		if hits:
 			if self.velY > 0:
 				self.rect.bottom = min(tile.top for tile in hits)
@@ -152,11 +168,25 @@ class Player(pygame.sprite.Sprite):
 			self.velY = 0
 			self.posY = self.rect.y
 
-	def update(self, collision_tiles):
+		dangerTouch = [tile for tile in danger_tiles if self.rect.colliderect(tile)]
+		if dangerTouch and self.hitCooldown <= 0:
+			self.hitCooldown = 2
+			self.health -= 1
+			self.velX *= -1.2
+			self.velY *= -1.2
+
+	def update(self, collision_tiles, danger_tiles):
 		"""it's moving"""
 		print(self.isFacingLeft)
-		
-		self.move(collision_tiles)
+
+		if self.hitCooldown > 0:
+			self.hitCooldown -= 0.1
+
+		if self.health <= 0:
+			print("oof")
+		else:
+			self.move(collision_tiles, danger_tiles)
+
 		match self.animationState:
 			case "idle":
 				self.current_frame = 0
@@ -168,6 +198,8 @@ class Player(pygame.sprite.Sprite):
 				self.current_frame = 2
 			case "crouch":
 				self.current_frame = 3
+			case "hurt":
+				self.current_frame = 4
 			
 		self.image = pygame.transform.flip(self.frames[int(self.current_frame)], self.isFacingLeft, False)
 
@@ -177,30 +209,61 @@ class Player(pygame.sprite.Sprite):
 
 #tiles and shit
 
-TileScale = 16
+TileScale = 32
 TileSpritesheets = {
-	1: SpriteSheet('Assets/Images/Tiles/Tiles01.png', 1)
+	1: SpriteSheet('Assets/Images/Tiles/Tiles01.png', 2)
 }
 TileTextures = {
-	1: TileSpritesheets[1].get_image(0,0,16,16,False)
+	"GrassUL": TileSpritesheets[1].get_image(0,0,32,32,False),
+	"GrassUC": TileSpritesheets[1].get_image(32,0,32,32,False),
+	"GrassUR": TileSpritesheets[1].get_image(64,0,32,32,False),
+	"GrassCL": TileSpritesheets[1].get_image(0,32,32,32,False),
+	"Dirt": TileSpritesheets[1].get_image(32,32,32,32,False),
+	"GrassCR": TileSpritesheets[1].get_image(64,32,32,32,False),
+	"GrassLL": TileSpritesheets[1].get_image(0,64,32,32,False),
+	"GrassLC": TileSpritesheets[1].get_image(32,64,32,32,False),
+	"GrassLR": TileSpritesheets[1].get_image(64,64,32,32,False),
+
+	"SpikeUC": TileSpritesheets[1].get_image(32,96,32,32,False),
+	"SpikeCL": TileSpritesheets[1].get_image(0,128,32,32,False),
+	"SpikeCR": TileSpritesheets[1].get_image(64,128,32,32,False),
+	"SpikeLC": TileSpritesheets[1].get_image(32,160,32,32,False)
 }
+TileProperties = {
+	"GrassUL": "solid",
+	"GrassUC": "solid",
+	"GrassUR": "solid",
+	"GrassCL": "solid",
+	"Dirt": "solid",
+	"GrassCR": "solid",
+	"GrassLL": "solid",
+	"GrassLC": "solid",
+	"GrassLR": "solid",
+
+	"SpikeUC": "danger",
+	"SpikeCL": "danger",
+	"SpikeCR": "danger",
+	"SpikeLC": "danger"
+}
+blocks = []
+danger = []
 
 def BuildMap(map_data, cameraX, cameraY):
-    solid_blocks = []
+	global blocks, danger
+	for row_idx, row in enumerate(map_data):
+		for col_idx, tile_type in enumerate(row):
+			x = col_idx * TileScale
+			y = row_idx * TileScale
 
-    for row_idx, row in enumerate(map_data):
-        for col_idx, tile_type in enumerate(row):
-            x = col_idx * TileScale
-            y = row_idx * TileScale
+			if tile_type in TileTextures:
+				screen.blit(TileTextures[tile_type], (x - cameraX, y - cameraY))
 
-            if tile_type in TileTextures:
-                screen.blit(TileTextures[tile_type], (x - cameraX, y - cameraY))
-
-            if tile_type == 1:
-                tile_rect = pygame.Rect(x, y, TileScale, TileScale)
-                solid_blocks.append(tile_rect)
-                
-    return solid_blocks
+				if TileProperties[tile_type] == "solid":
+					tile_rect = pygame.Rect(x, y, TileScale, TileScale)
+					blocks.append(tile_rect)
+				if TileProperties[tile_type] == "danger":
+					tile_rect = pygame.Rect(x, y, TileScale, TileScale)
+					danger.append(tile_rect)
 
 
 PlayerGroup = pygame.sprite.Group()
@@ -227,21 +290,24 @@ while running:
 			running = False
 
 	tiles = BuildMap([
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
-		 [1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1],
-		 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-		 ], camX, camY) #this is gonna be annoying isn't it
+		[],
+		[],
+		[],
+		[],
+		[],
+		[],
+		[],
+		[],
+		[],
+		[],
+		[],
+		[0, "SpikeUC", 0],
+		["GrassUL","GrassUC","GrassUR"],
+		["GrassCL","Dirt","GrassCR"],
+		["GrassLL","GrassLC","GrassLR"]
+		], camX, camY) #this is gonna be annoying isn't it
 			
-	PlayerGroup.update(tiles)
+	PlayerGroup.update(blocks, danger)
 	PlayerCount = len(PlayerGroup)
 	for indvPlayer in PlayerGroup:
 		indvPlayer.draw(screen, camX, camY)
