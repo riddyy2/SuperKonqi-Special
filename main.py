@@ -8,6 +8,10 @@ import pygame
 from pygame.locals import *
 
 pygame.init()
+scw = 700
+sch = 700
+screen = pygame.display.set_mode((scw, sch))
+pygame.display.set_caption('Something Cool')
 
 #stuff
 import pygame
@@ -40,6 +44,10 @@ class Player(pygame.sprite.Sprite):
 		super().__init__()
 		self.spritesheet = SpriteSheet(f"Assets/Images/Sprites/Players/{PlayCharName}/{State}.png", scale) 
 		#something goes here
+  
+		#player stats
+		self.speed = 5
+		self.jump = 10
 		
 
 		self.frames = []
@@ -56,13 +64,28 @@ class Player(pygame.sprite.Sprite):
 		self.image = self.frames[int(self.current_frame)]
 		self.rect = self.image.get_rect()
 		self.rect.center = (0, 0)
+	
+	def handle_input(self):
+		"""guess"""
+		keys = pygame.key.get_pressed()
 
-	def update(self, action = "idle", position = (0,0)):
+		#velocity for later
+		dx = 0
+		dy = 0
+
+		if keys[pygame.K_a]:
+			dx = -self.speed
+		if keys[pygame.K_d]:
+			dx = self.speed
+
+		self.rect.x += dx
+		self.rect.y += dy
+
+	def update(self, action = "idle"):
 		"""Handles updating the animation frame."""
 		self.current_frame += self.animation_speed
-
-		self.rect.center = position
 		
+		self.handle_input()
 		match action:
 			case "idle":
 				self.current_frame = 0
@@ -77,17 +100,36 @@ class Player(pygame.sprite.Sprite):
 			
 		self.image = self.frames[int(self.current_frame)]
 
+#tiles and shit
+TileScale = 32
+TileTextures = {
+	1: pygame.transform.scale(pygame.image.load('Assets/Images/Tiles/Tiles01.png').convert_alpha(), (TileScale, TileScale))
+}
+def draw_and_build_physics(map_data):
+    solid_blocks = []  # Clear/rebuild list every frame for collisions
 
-#screen width and height
-scw = 700
-sch = 700
-screen = pygame.display.set_mode((scw, sch))
-pygame.display.set_caption('Something Cool')
+    for row_idx, row in enumerate(map_data):
+        for col_idx, tile_type in enumerate(row):
+            # Calculate pixel positions
+            x = col_idx * TileScale
+            y = row_idx * TileScale
+
+            # 1. Render the texture if it exists
+            if tile_type in TileTextures:
+                screen.blit(TileTextures[tile_type], (x, y))
+
+            # 2. Add bounding box for solid blocks
+            if tile_type == 1:
+                tile_rect = pygame.Rect(x, y, TileScale, TileScale)
+                solid_blocks.append(tile_rect)
+                
+    return solid_blocks
 
 
-all_sprites = pygame.sprite.Group()
+PlayerGroup = pygame.sprite.Group()
+
 player = Player("Konqi", "base", 32, 24, 5)
-all_sprites.add(player)
+PlayerGroup.add(player)
 
 clock = pygame.time.Clock()
 
@@ -99,8 +141,10 @@ while running:
 		if event.type == pygame.QUIT:
 			running = False
 			
-	all_sprites.update()
-	all_sprites.draw(screen)
+	PlayerGroup.update()
+	PlayerGroup.draw(screen)
+ 
+	draw_and_build_physics([[1,1,1]]) #this is gonna be annoying isn't it
 	
 	pygame.display.flip()
 	clock.tick(60)

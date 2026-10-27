@@ -1,0 +1,26 @@
+{
+    "activeFile": "timemap.tmx",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "Tiles01.tsx": {
+            "scaleInDock": 1
+        },
+        "timemap.tmx": {
+            "scale": 1.33890625,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 480.24273544170853,
+                "y": 319.663904773019
+            }
+        }
+    },
+    "map.lastUsedFormat": "tmx",
+    "openFiles": [
+        "timemap.tmx"
+    ],
+    "project": "tilemap.tiled-project",
+    "recentFiles": [
+        "timemap.tmx"
+    ]
+}
