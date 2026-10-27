@@ -1,7 +1,9 @@
 #this is my first time using pygame
 #so i'm probably doing something weird
 
+#10/27 discovered jamie used ai. oof :C
 
+debug = True
 
 
 import pygame
@@ -29,10 +31,11 @@ class SpriteSheet:
 			print(f"Unable to load spritesheet image: {filename}")
 			raise SystemExit(e)
 
-	def get_image(self, x, y, width, height):
+	def get_image(self, x, y, width, height, flip):
 		"""grabs specific rectangle area out of the spritesheet"""
 		rect = pygame.Rect(x, y, width, height)
-		image = self.sheet.subsurface(rect)
+		image = pygame.transform.flip(self.sheet.subsurface(rect),flip,False)
+
 		return image
 
 	def load_strip(self, rect, image_count):
@@ -48,76 +51,117 @@ class Player(pygame.sprite.Sprite):
 		#something goes here
   
 		#player stats
+		self.posX = 80
+		self.posY = 80
+		self.velX = 0
+		self.velY = -1
+		self.onGround = False
+
+		#player physics
+		self.frictionGround = 1.4
+		self.frictionAir = 1.1
+		self.frictionCrouch = 1.2
 		self.speed = 5
-		self.jump_speed = 10
+		self.jumpForce = 13
 		self.gravity = 0.5
-		self.max_fall_speed = 12
-		self.velocity_y = 0
-		self.on_ground = False
-		
+		self.maxFallVelocity = 12
+
+		#visual
+		self.debugBoxColor = (255,0,0)
+		self.animationState = "idle"
 		self.imgOffX = -10.8 * scale
-		self.imgOffY = -7.2 * scale
-  
+		self.imgOffY = -9.6 * scale
+		self.isFacingLeft = True
+
+
 		self.frames = []
 		self.spriteWidth = spriteWidth * scale
 		self.spriteHeight = spriteHeight * scale
 		
 		for i in range(4): #frame count i'll make this editable later idk what i want to do with it tho
-			frame = self.spritesheet.get_image(i * self.spriteWidth, 0, self.spriteWidth, self.spriteHeight)
+			frame = self.spritesheet.get_image(i * self.spriteWidth, 0, self.spriteWidth, self.spriteHeight, False)
 			self.frames.append(frame)
 
 		self.current_frame = 0
-		self.animation_speed = 0.15 
+		self.animationSpeed = 0.15 
 		
 		self.image = self.frames[int(self.current_frame)]
-		self.rect = self.image.get_rect().scale_by((0.3, 0.7))
-		self.rect.topleft = (8, 16)
+		self.rect = self.image.get_rect().scale_by((0.3, 0.6))
+		self.rect.topleft = (self.posX, self.posY)
 	
 	def jump(self):
-		if self.on_ground:
-			self.velocity_y = -self.jump_speed
-			self.on_ground = False
+		if self.onGround:
+			self.velY = -self.jumpForce
+			self.onGround = False
 
-	def handle_input(self, collision_tiles):
+	def move(self, collision_tiles):
 		keys = pygame.key.get_pressed()
+		self.animationState = "idle"
 
-		dx = 0
+		if keys[pygame.K_SPACE]:
+			self.jump()
 
-		if keys[pygame.K_a]:
-			dx = -self.speed
-		if keys[pygame.K_d]:
-			dx = self.speed
-
-		self.rect.x += dx
+		frictionFinal = self.frictionGround
+		if keys[pygame.K_s]:
+			self.animationState = "crouch"
+			frictionFinal = self.frictionCrouch
+		else:
+			if keys[pygame.K_a] and self.velX > -4:
+				self.isFacingLeft = True
+				self.debugBoxColor = (25,0,0)
+				self.animationState = "walk"
+				self.velX = -4
+			if keys[pygame.K_d] and self.velX < 4:
+				self.isFacingLeft = False
+				self.debugBoxColor = (0,0,25)
+				self.animationState = "walk"
+				self.velX = 4
+			if self.onGround:
+				self.debugBoxColor = (0,0,0)
+			else:
+				self.debugBoxColor = (0,255,0)
+				self.animationState = "air"
+				frictionFinal = self.frictionAir
+		try:
+			self.velX = self.velX/frictionFinal
+		except ZeroDivisionError:
+			self.velX = 0
+		print(self.velX, frictionFinal)
+		self.posX += self.velX
+		self.rect.x = round(self.posX)
 		hits = [tile for tile in collision_tiles if self.rect.colliderect(tile)]
 		if hits:
-			if dx > 0:
+			if self.velX > 0:
 				self.rect.right = min(tile.left for tile in hits)
-			elif dx < 0:
+			elif self.velX < 0:
 				self.rect.left = max(tile.right for tile in hits)
+			self.velX = 0
+			self.posX = self.rect.x
 
-		self.velocity_y = min(self.velocity_y + self.gravity, self.max_fall_speed)
-		self.rect.y += round(self.velocity_y)
+		self.velY = min(self.velY + self.gravity, self.maxFallVelocity)+0.1
+		self.posY += round(self.velY)
+		self.rect.y = round(self.posY) #round? idk
 		hits = [tile for tile in collision_tiles if self.rect.colliderect(tile)]
-		self.on_ground = False
+		self.onGround = False
 		if hits:
-			if self.velocity_y > 0:
+			if self.velY > 0:
 				self.rect.bottom = min(tile.top for tile in hits)
-				self.on_ground = True
-			elif self.velocity_y < 0:
+				self.onGround = True
+			elif self.velY < 0:
 				self.rect.top = max(tile.bottom for tile in hits)
-			self.velocity_y = 0
+			self.velY = 0
+			self.posY = self.rect.y
 
-	def update(self, collision_tiles, action = "idle"):
-		"""Handles updating the animation frame."""
-		self.current_frame += self.animation_speed
+	def update(self, collision_tiles):
+		"""it's moving"""
+		print(self.isFacingLeft)
 		
-		self.handle_input(collision_tiles)
-		match action:
+		self.move(collision_tiles)
+		match self.animationState:
 			case "idle":
 				self.current_frame = 0
 			case "walk":
-				self.current_frame += self.animation_speed
+				self.current_frame += self.animationSpeed
 				if self.current_frame >= 3:
 					self.current_frame = 1
 			case "air":
@@ -125,31 +169,33 @@ class Player(pygame.sprite.Sprite):
 			case "crouch":
 				self.current_frame = 3
 			
-		self.image = self.frames[int(self.current_frame)]
+		self.image = pygame.transform.flip(self.frames[int(self.current_frame)], self.isFacingLeft, False)
 
-	def draw(self, surface):
-		draw_pos = (self.rect.x + self.imgOffX, self.rect.y + self.imgOffY)
+	def draw(self, surface, offsetX, offsetY):
+		draw_pos = (self.rect.x + self.imgOffX - offsetX, self.rect.y + self.imgOffY - offsetY)
 		surface.blit(self.image, draw_pos)
 
 #tiles and shit
-TileScale = 32
-TileTextures = {
-	1: pygame.transform.scale(pygame.image.load('Assets/Images/Tiles/Tiles01.png').convert_alpha(), (TileScale, TileScale))
+
+TileScale = 16
+TileSpritesheets = {
+	1: SpriteSheet('Assets/Images/Tiles/Tiles01.png', 1)
 }
-def BuildMap(map_data):
-    solid_blocks = []  # Clear/rebuild list every frame for collisions
+TileTextures = {
+	1: TileSpritesheets[1].get_image(0,0,16,16,False)
+}
+
+def BuildMap(map_data, cameraX, cameraY):
+    solid_blocks = []
 
     for row_idx, row in enumerate(map_data):
         for col_idx, tile_type in enumerate(row):
-            # Calculate pixel positions
             x = col_idx * TileScale
             y = row_idx * TileScale
 
-            # 1. Render the texture if it exists
             if tile_type in TileTextures:
-                screen.blit(TileTextures[tile_type], (x, y))
+                screen.blit(TileTextures[tile_type], (x - cameraX, y - cameraY))
 
-            # 2. Add bounding box for solid blocks
             if tile_type == 1:
                 tile_rect = pygame.Rect(x, y, TileScale, TileScale)
                 solid_blocks.append(tile_rect)
@@ -159,20 +205,26 @@ def BuildMap(map_data):
 
 PlayerGroup = pygame.sprite.Group()
 
-player = Player("Konqi", "base", 32, 24, 5)
+player = Player("Konqi", "base", 32, 24, 2)
 PlayerGroup.add(player)
+
+#camera?
+camX = 0
+camY = 0
+camSmoothX = 4
+camSmoothY = 70
 
 clock = pygame.time.Clock()
 
 running = True
 while running:
+	camX -= (scw/2)/camSmoothX
+	camY -= (sch/2)/camSmoothY
 	screen.fill((40, 40, 40))
 	
 	for event in pygame.event.get():
 		if event.type == pygame.QUIT:
 			running = False
-		elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-			player.jump()
 
 	tiles = BuildMap([
 		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -181,22 +233,26 @@ while running:
 		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
 		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
+		 [0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0],
+		 [1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1],
 		 [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-		 ]) #this is gonna be annoying isn't it
+		 ], camX, camY) #this is gonna be annoying isn't it
 			
 	PlayerGroup.update(tiles)
+	PlayerCount = len(PlayerGroup)
 	for indvPlayer in PlayerGroup:
-		indvPlayer.draw(screen)
-	pygame.draw.rect(screen, (255,0,0), player.rect)
+		indvPlayer.draw(screen, camX, camY)
+		camX -= (camX - indvPlayer.posX)/camSmoothX
+		camY -= (camY - indvPlayer.posY)/camSmoothY
+
+		
 	
 	pygame.display.flip()
 	clock.tick(60)
 	#Fuck you btw
-	#thanks jamie
+	#fuck you too
 
 pygame.quit()
